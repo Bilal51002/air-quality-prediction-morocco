@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 
-from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
@@ -11,33 +10,28 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 # =========================
 # 1. Charger le dataset prêt
 # =========================
-INPUT_FILE = "morocco_air_quality_data_model_ready.csv"
+INPUT_FILE = "../data/morocco_air_quality_data_model_ready.csv"
+OUTPUT_RESULTS = "../results/step3_model_results.csv"
 TARGET = "pm2_5"
 
 df = pd.read_csv(INPUT_FILE)
 
 print("Aperçu du dataset :")
 print(df.head())
-
 print("\nTaille du dataset :", df.shape)
 
 # =========================
-# 2. Séparer X et y
+# 2. Utiliser le split chronologique déjà fait dans 02_prepare_data.py
+#    (au lieu d'un train_test_split aléatoire qui recréerait une fuite
+#    temporelle entre mesures consécutives)
 # =========================
-X = df.drop(columns=[TARGET])
-y = df[TARGET]
+train_df = df[df["split"] == "train"]
+test_df = df[df["split"] == "test"]
 
-print("\nShape de X :", X.shape)
-print("Shape de y :", y.shape)
-
-# =========================
-# 3. Train / Test split
-# =========================
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y,
-    test_size=0.2,
-    random_state=42
-)
+X_train = train_df.drop(columns=[TARGET, "split"])
+y_train = train_df[TARGET]
+X_test = test_df.drop(columns=[TARGET, "split"])
+y_test = test_df[TARGET]
 
 print("\nTaille X_train :", X_train.shape)
 print("Taille X_test :", X_test.shape)
@@ -45,7 +39,7 @@ print("Taille y_train :", y_train.shape)
 print("Taille y_test :", y_test.shape)
 
 # =========================
-# 4. Définir les modèles
+# 3. Définir les modèles
 # =========================
 models = {
     "Linear Regression": LinearRegression(),
@@ -57,28 +51,30 @@ models = {
 }
 
 # =========================
-# 5. Entraîner et évaluer
+# 4. Entraîner et évaluer
 # =========================
 results = []
+trained_models = {}
 
 for model_name, model in models.items():
     print(f"\n===== {model_name} =====")
-    
+
     # Entraînement
     model.fit(X_train, y_train)
-    
+    trained_models[model_name] = model
+
     # Prédiction
     y_pred = model.predict(X_test)
-    
+
     # Métriques
     mae = mean_absolute_error(y_test, y_pred)
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     r2 = r2_score(y_test, y_pred)
-    
+
     print("MAE  :", round(mae, 4))
     print("RMSE :", round(rmse, 4))
     print("R²   :", round(r2, 4))
-    
+
     results.append({
         "Model": model_name,
         "MAE": mae,
@@ -87,15 +83,28 @@ for model_name, model in models.items():
     })
 
 # =========================
-# 6. Tableau récapitulatif
+# 5. Tableau récapitulatif
 # =========================
 results_df = pd.DataFrame(results)
 
-print("\n===== Résultats finaux =====")
+print("\n===== Résultats finaux (split chronologique) =====")
 print(results_df.sort_values(by="RMSE"))
+
+# =========================
+# 6. Importance des features (Random Forest)
+#    Utile pour expliquer le modèle, pas juste ses métriques.
+# =========================
+rf = trained_models["Random Forest Regressor"]
+importances = pd.Series(rf.feature_importances_, index=X_train.columns)
+importances = importances.sort_values(ascending=False)
+
+print("\n===== Top 10 features les plus importantes (Random Forest) =====")
+print(importances.head(10))
+
+importances.to_csv("../results/feature_importance.csv", header=["importance"])
 
 # =========================
 # 7. Sauvegarder les résultats
 # =========================
-results_df.to_csv("step3_model_results.csv", index=False)
-print("\nRésultats sauvegardés dans : step3_model_results.csv")
+results_df.to_csv(OUTPUT_RESULTS, index=False)
+print(f"\nRésultats sauvegardés dans : {OUTPUT_RESULTS}")

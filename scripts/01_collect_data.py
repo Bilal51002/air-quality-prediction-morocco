@@ -3,41 +3,61 @@ import time
 import requests
 import pandas as pd
 from datetime import datetime
+from dotenv import load_dotenv
 
+# =========================================================
 # CONFIGURATION
+# =========================================================
 
-import os
+load_dotenv()
 
 API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
+if not API_KEY:
+    raise EnvironmentError(
+        "OPENWEATHER_API_KEY manquant. "
+        "Vérifie que ton fichier .env existe et contient : "
+        "OPENWEATHER_API_KEY=ta_cle_ici"
+    )
 
 CSV_FILE = "morocco_air_quality_data.csv"
 
-COLLECTION_INTERVAL_SECONDS = 3600  # 1 hour
+COLLECTION_INTERVAL_SECONDS = 3600  # 1 heure
 
 REQUEST_TIMEOUT = 40
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 10
 
+# 7 villes marocaines (base commune de l'equipe, unifiee apres fusion
+# des 3 collectes paralleles menees separement au debut du projet)
 CITIES = {
-    "Casablanca": {"lat": 33.5731, "lon": -7.5898},
-    "Rabat": {"lat": 34.0209, "lon": -6.8416},
-    "Marrakech": {"lat": 31.6295, "lon": -7.9811},
-    "Fes": {"lat": 34.0331, "lon": -5.0003}
+    "Casablanca":       {"lat": 33.5731, "lon": -7.5898},
+    "Rabat":             {"lat": 34.0209, "lon": -6.8416},
+    "Marrakech":         {"lat": 31.6295, "lon": -7.9811},
+    "Fes":               {"lat": 34.0331, "lon": -5.0003},
+    "Agadir":            {"lat": 30.4278, "lon": -9.5981},
+    "Tanger":            {"lat": 35.7595, "lon": -5.8340},
+    "Karia Ba Mohamed":  {"lat": 34.3667, "lon": -5.2139},
 }
 
+# =========================================================
 # API FUNCTIONS WITH RETRY
+# =========================================================
 
 def request_with_retry(url, params, api_name):
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = requests.get(
-                url,
-                params=params,
-                timeout=REQUEST_TIMEOUT
-            )
+            response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
-            return response.json()
+
+            try:
+                return response.json()
+            except ValueError as e:
+                # Reponse HTTP 200 mais corps non-JSON (rare mais arrive) :
+                # on traite ca comme un echec a retenter, pas comme un crash.
+                raise requests.exceptions.RequestException(
+                    f"Reponse non-JSON recue de {api_name}: {e}"
+                )
 
         except requests.exceptions.RequestException as e:
             print(f"{api_name} attempt {attempt}/{MAX_RETRIES} failed: {e}")
@@ -50,30 +70,19 @@ def request_with_retry(url, params, api_name):
 
 def get_weather_data(lat, lon):
     url = "https://api.openweathermap.org/data/2.5/weather"
-
-    params = {
-        "lat": lat,
-        "lon": lon,
-        "appid": API_KEY,
-        "units": "metric"
-    }
-
+    params = {"lat": lat, "lon": lon, "appid": API_KEY, "units": "metric"}
     return request_with_retry(url, params, "Weather API")
 
 
 def get_air_quality_data(lat, lon):
     url = "https://api.openweathermap.org/data/2.5/air_pollution"
-
-    params = {
-        "lat": lat,
-        "lon": lon,
-        "appid": API_KEY
-    }
-
+    params = {"lat": lat, "lon": lon, "appid": API_KEY}
     return request_with_retry(url, params, "Air Quality API")
 
 
+# =========================================================
 # DATA COLLECTION
+# =========================================================
 
 def collect_one_city(city_name, lat, lon):
     weather = get_weather_data(lat, lon)
@@ -113,13 +122,15 @@ def collect_one_city(city_name, lat, lon):
         "so2": components.get("so2"),
         "pm2_5": components.get("pm2_5"),
         "pm10": components.get("pm10"),
-        "nh3": components.get("nh3")
+        "nh3": components.get("nh3"),
     }
 
     return row
 
 
+# =========================================================
 # SAVE DATA
+# =========================================================
 
 def save_rows_without_duplicates(new_rows):
     new_df = pd.DataFrame(new_rows)
@@ -130,11 +141,7 @@ def save_rows_without_duplicates(new_rows):
     else:
         df = new_df
 
-    df = df.drop_duplicates(
-        subset=["city", "timestamp_hour"],
-        keep="first"
-    )
-
+    df = df.drop_duplicates(subset=["city", "timestamp_hour"], keep="first")
     df = df.sort_values(by=["timestamp_hour", "city"])
 
     try:
@@ -145,12 +152,13 @@ def save_rows_without_duplicates(new_rows):
     except PermissionError:
         backup_file = f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         df.to_csv(backup_file, index=False)
-
         print("ERROR: CSV file is open in Excel or another program.")
         print(f"Data saved instead to backup file: {backup_file}")
 
 
+# =========================================================
 # COLLECT ALL CITIES
+# =========================================================
 
 def collect_all_cities_once():
     rows = []
@@ -158,13 +166,7 @@ def collect_all_cities_once():
     for city_name, coords in CITIES.items():
         try:
             print(f"Collecting data for {city_name}...")
-
-            row = collect_one_city(
-                city_name,
-                coords["lat"],
-                coords["lon"]
-            )
-
+            row = collect_one_city(city_name, coords["lat"], coords["lon"])
             rows.append(row)
             print(f"{city_name}: OK")
 
@@ -180,7 +182,6 @@ def collect_all_cities_once():
 
 
 # MAIN LOOP
-
 
 if __name__ == "__main__":
     while True:

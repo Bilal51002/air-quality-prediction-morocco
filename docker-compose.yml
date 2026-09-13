@@ -1,0 +1,10 @@
+services:
+  air-quality:
+    build: .
+    volumes:
+      # Les fichiers generes (merged/clean/model_ready) et les resultats
+      # sont ecrits ici, sur la machine hote, pas perdus a l'arret du conteneur.
+      - ./data:/app/data
+      - ./results:/app/results
+    env_file:
+      - .env   # pour OPENWEATHER_API_KEY, si jamais tu relances la collecte
