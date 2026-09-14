@@ -1,0 +1,56 @@
+name: Pipeline CI
+
+# Se declenche a chaque push et pull request sur main, et manuellement
+# depuis l'onglet Actions de GitHub.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Installer les dependances
+        run: pip install -r requirements.txt
+
+      - name: Etape 2 - Preparation des donnees
+        working-directory: scripts
+        run: python 02_prepare_data.py
+
+      - name: Etape 3 - Entrainement des modeles
+        working-directory: scripts
+        run: python 03_build_model.py
+
+      - name: Etape 4 - Federated learning (Flower)
+        working-directory: scripts
+        run: python 04_federated_learning.py
+
+      - name: Verifier que les resultats ont bien ete generes
+        run: |
+          test -f results/step3_model_results.csv
+          test -f results/federated_vs_centralized_results.csv
+          echo "Tous les fichiers de resultats attendus sont presents."
+
+      # Garde les resultats generes consultables depuis l'onglet Actions
+      # de GitHub, meme sans relancer le pipeline localement.
+      - name: Sauvegarder les resultats comme artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-results
+          path: |
+            results/
+            data/morocco_air_quality_data_clean.csv
+            data/morocco_air_quality_data_model_ready.csv
