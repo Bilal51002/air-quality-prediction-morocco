@@ -1,0 +1,57 @@
+Feature,Importance_pct,ModeleType
+pm10,86.74,Complet (avec pollution)
+o3,2.44,Complet (avec pollution)
+lon,1.73,Complet (avec pollution)
+no2,1.47,Complet (avec pollution)
+lat,1.35,Complet (avec pollution)
+humidity,1.23,Complet (avec pollution)
+day,1.12,Complet (avec pollution)
+hour,0.8,Complet (avec pollution)
+temperature,0.74,Complet (avec pollution)
+pressure,0.72,Complet (avec pollution)
+city_Rabat,0.56,Complet (avec pollution)
+wind_speed,0.4,Complet (avec pollution)
+aqi,0.11,Complet (avec pollution)
+weather_description_scattered clouds,0.1,Complet (avec pollution)
+city_Tanger,0.09,Complet (avec pollution)
+weather_description_clear sky,0.07,Complet (avec pollution)
+weather_description_overcast clouds,0.06,Complet (avec pollution)
+month,0.06,Complet (avec pollution)
+city_Casablanca,0.06,Complet (avec pollution)
+weather_description_few clouds,0.04,Complet (avec pollution)
+city_Fes,0.04,Complet (avec pollution)
+city_Marrakech,0.02,Complet (avec pollution)
+weather_description_thunderstorm,0.01,Complet (avec pollution)
+weather_description_light rain,0.01,Complet (avec pollution)
+city_Karia Ba Mohamed,0.01,Complet (avec pollution)
+weather_description_mist,0.0,Complet (avec pollution)
+weather_description_moderate rain,0.0,Complet (avec pollution)
+weather_description_dust,0.0,Complet (avec pollution)
+weather_description_drizzle,0.0,Complet (avec pollution)
+year,0.0,Complet (avec pollution)
+day,43.39,Meteo seule
+city_Marrakech,12.53,Meteo seule
+pressure,10.02,Meteo seule
+temperature,9.07,Meteo seule
+hour,6.36,Meteo seule
+humidity,3.84,Meteo seule
+wind_speed,2.65,Meteo seule
+month,2.59,Meteo seule
+lat,1.7,Meteo seule
+lon,1.65,Meteo seule
+city_Rabat,1.64,Meteo seule
+weather_description_clear sky,1.22,Meteo seule
+weather_description_overcast clouds,0.8,Meteo seule
+weather_description_scattered clouds,0.8,Meteo seule
+city_Fes,0.48,Meteo seule
+weather_description_few clouds,0.45,Meteo seule
+city_Casablanca,0.37,Meteo seule
+city_Tanger,0.19,Meteo seule
+weather_description_moderate rain,0.1,Meteo seule
+weather_description_thunderstorm,0.06,Meteo seule
+city_Karia Ba Mohamed,0.03,Meteo seule
+weather_description_light rain,0.03,Meteo seule
+weather_description_mist,0.02,Meteo seule
+weather_description_dust,0.0,Meteo seule
+weather_description_drizzle,0.0,Meteo seule
+year,0.0,Meteo seule
