@@ -224,9 +224,11 @@ jobs:
       - name: Afficher le log complet de la tache echouee
         if: failure()
         run: |
+          echo "=== Structure reelle des logs ==="
+          docker compose exec -T airflow-scheduler find /opt/airflow/logs -type f -name "*.log"
+          echo "=== Contenu de tous les logs de prepare_data ==="
           docker compose exec -T airflow-scheduler bash -c \
-            "cat /opt/airflow/logs/dag_id=air_quality_pipeline/run_id=*/task_id=prepare_data/attempt=1.log" || true
-
+            "find /opt/airflow/logs -path '*prepare_data*' -name '*.log' -exec cat {} \;"
       - name: Logs des services en cas d'echec
         if: failure()
         run: docker compose logs --tail 300
