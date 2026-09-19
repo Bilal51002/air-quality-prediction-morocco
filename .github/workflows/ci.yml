@@ -194,12 +194,7 @@ jobs:
           docker compose exec -T airflow-scheduler airflow dags unpause air_quality_pipeline
           docker compose exec -T airflow-scheduler airflow dags trigger air_quality_pipeline -r "$RUN_ID"
 
-      - name: Attendre la fin du DAG et verifier son etat
-      - name: Afficher le log complet de la tache echouee
-        if: failure()
-        run: |
-          docker compose exec -T airflow-scheduler bash -c \
-            "cat /opt/airflow/logs/dag_id=air_quality_pipeline/run_id=*/task_id=prepare_data/attempt=1.log" || true
+            - name: Attendre la fin du DAG et verifier son etat
         run: |
           CHECK='import os; from airflow.utils.session import create_session; from airflow.models import DagRun; session = create_session().__enter__(); dr = session.query(DagRun).filter(DagRun.dag_id == "air_quality_pipeline", DagRun.run_id == os.environ["RUN_ID"]).first(); print(dr.state if dr else "introuvable")'
 
@@ -225,6 +220,12 @@ jobs:
           echo "Timeout : le DAG n'a pas termine a temps."
           docker compose logs airflow-scheduler --tail 200
           exit 1
+
+      - name: Afficher le log complet de la tache echouee
+        if: failure()
+        run: |
+          docker compose exec -T airflow-scheduler bash -c \
+            "cat /opt/airflow/logs/dag_id=air_quality_pipeline/run_id=*/task_id=prepare_data/attempt=1.log" || true
 
       - name: Logs des services en cas d'echec
         if: failure()
