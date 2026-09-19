@@ -220,6 +220,11 @@ jobs:
           echo "Timeout : le DAG n'a pas termine a temps."
           docker compose logs airflow-scheduler --tail 200
           exit 1
+      - name: Preparer les dossiers Airflow avec les bonnes permissions
+        run: |
+          mkdir -p ./airflow/dags ./airflow/logs ./airflow/plugins ./airflow/config
+          chmod -R 777 ./airflow/logs
+          chmod -R 777 ./data ./results
 
       - name: Afficher le log complet de la tache echouee
         if: failure()
