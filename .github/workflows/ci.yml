@@ -9,9 +9,44 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Annule automatiquement une execution en cours si un nouveau push arrive
+# sur la meme branche, pour ne pas empiler des runs obsoletes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  run-pipeline:
+
+  # ================================================================
+  # 1. LINT — verification rapide (quelques secondes) avant de lancer
+  #    quoi que ce soit de plus lourd. N'echoue que sur de vraies
+  #    erreurs (syntaxe cassee, nom non defini), pas sur du style.
+  # ================================================================
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer ruff
+        run: pip install ruff
+
+      - name: Verifier scripts/ et airflow/dags/
+        run: ruff check scripts/ airflow/dags/ --select=E9,F
+
+
+  # ================================================================
+  # 2. PIPELINE — execute le pipeline Python complet (02 -> 06),
+  #    hors Docker/Airflow, pour verifier que le code lui-meme tourne.
+  # ================================================================
+  pipeline:
+    runs-on: ubuntu-latest
+    needs: lint
 
     steps:
       - name: Recuperer le code
@@ -38,10 +73,22 @@ jobs:
         working-directory: scripts
         run: python 04_federated_learning.py
 
-      - name: Verifier que les resultats ont bien ete generes
+      - name: Etape 5 - Comparaison meteo seule vs complet
+        working-directory: scripts
+        run: python 05_weather_only_comparison.py
+
+      - name: Etape 6 - Export Power BI
+        working-directory: scripts
+        run: python 06_export_powerbi.py
+
+      - name: Verifier que tous les resultats ont bien ete generes
         run: |
           test -f results/step3_model_results.csv
           test -f results/federated_vs_centralized_results.csv
+          test -f results/weather_only_vs_full_results.csv
+          test -f results/feature_importance.csv
+          test -f data/powerbi/villes.csv
+          test -f data/powerbi/mesures.csv
           echo "Tous les fichiers de resultats attendus sont presents."
 
       # Garde les resultats generes consultables depuis l'onglet Actions
@@ -54,3 +101,124 @@ jobs:
             results/
             data/morocco_air_quality_data_clean.csv
             data/morocco_air_quality_data_model_ready.csv
+            data/powerbi/
+
+
+  # ================================================================
+  # 3. DOCKER BUILD — construit les deux images (air-quality et
+  #    airflow) et valide le DAG avec la vraie image Airflow.
+  #    C'est ce job qui aurait attrape le Dockerfile vide, le mauvais
+  #    contexte de build, ou une erreur de syntaxe dans le DAG.
+  # ================================================================
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: lint
+
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Construire l'image air-quality
+        run: docker build -t air-quality-test .
+
+      - name: Construire l'image Airflow
+        run: docker build -t airflow-test -f airflow/Dockerfile .
+
+      - name: .env factice pour la validation compose (pas de vraie cle API ici)
+        run: echo "OPENWEATHER_API_KEY=dummy" > .env
+
+      - name: Valider la syntaxe de docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Valider que le DAG s'importe sans erreur
+        run: |
+          CHECK="from airflow.models import DagBag; import sys; db = DagBag('/opt/airflow/dags', include_examples=False); print('Erreurs d import :', db.import_errors) if db.import_errors else print('DAGs charges avec succes :', list(db.dags.keys())); sys.exit(1 if db.import_errors else 0)"
+          docker run --rm -v "$PWD/airflow/dags:/opt/airflow/dags" airflow-test python -c "$CHECK"
+
+
+  # ================================================================
+  # 4. INTEGRATION AIRFLOW — lance la stack complete (Postgres + les
+  #    5 services Airflow) et declenche reellement le DAG pour
+  #    verifier qu'il se termine en succes. Plus lent (~3-5 min), donc
+  #    limite aux push sur main et au declenchement manuel : pas sur
+  #    chaque pull request, pour garder des retours rapides.
+  # ================================================================
+  integration-airflow:
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: .env factice (pas de vraie cle API necessaire pour ce test)
+        run: echo "OPENWEATHER_API_KEY=dummy" > .env
+
+      - name: Construire toutes les images
+        run: docker compose build
+
+      - name: Demarrer Postgres et attendre qu'il soit sain
+        run: docker compose up -d postgres --wait
+
+      - name: Initialiser Airflow (migrations + utilisateur admin)
+        run: docker compose up airflow-init
+
+      - name: Demarrer scheduler, dag-processor, triggerer, api-server
+        run: docker compose up -d airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server
+
+      - name: Attendre que l'API server reponde
+        run: |
+          for i in $(seq 1 24); do
+            if curl -sf -o /dev/null http://localhost:8080/; then
+              echo "API server pret."
+              exit 0
+            fi
+            echo "En attente de l'API server... ($i/24)"
+            sleep 5
+          done
+          echo "L'API server n'a jamais repondu."
+          docker compose logs airflow-api-server --tail 100
+          exit 1
+
+      - name: Declencher le DAG air_quality_pipeline
+        run: |
+          RUN_ID="ci_$(date +%s)"
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          docker compose exec -T airflow-scheduler airflow dags unpause air_quality_pipeline
+          docker compose exec -T airflow-scheduler airflow dags trigger air_quality_pipeline -r "$RUN_ID"
+
+      - name: Attendre la fin du DAG et verifier son etat
+        run: |
+          CHECK='import os; from airflow.utils.session import create_session; from airflow.models import DagRun; session = create_session().__enter__(); dr = session.query(DagRun).filter(DagRun.dag_id == "air_quality_pipeline", DagRun.run_id == os.environ["RUN_ID"]).first(); print(dr.state if dr else "introuvable")'
+
+          for i in $(seq 1 60); do
+            STATE=$(docker compose exec -T -e RUN_ID="$RUN_ID" airflow-scheduler python -c "$CHECK" | tail -1 | tr -d '\r')
+
+            echo "Etat du DAG run ($i/60) : $STATE"
+
+            if [ "$STATE" = "success" ]; then
+              echo "Pipeline execute avec succes via Airflow."
+              exit 0
+            fi
+
+            if [ "$STATE" = "failed" ]; then
+              echo "Le DAG a echoue."
+              docker compose logs airflow-scheduler --tail 200
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+          echo "Timeout : le DAG n'a pas termine a temps."
+          docker compose logs airflow-scheduler --tail 200
+          exit 1
+
+      - name: Logs des services en cas d'echec
+        if: failure()
+        run: docker compose logs --tail 300
+
+      - name: Nettoyer (toujours, meme en cas d'echec)
+        if: always()
+        run: docker compose down -v

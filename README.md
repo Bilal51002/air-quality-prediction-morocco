@@ -142,11 +142,15 @@ Project/
 │   ├── feature_importance.csv
 │   ├── weather_only_vs_full_results.csv
 │   └── feature_importance_weather_only.csv
+├── airflow/
+│   ├── Dockerfile                 # extends apache/airflow with requirements.txt
+│   └── dags/
+│       └── air_quality_pipeline.py  # 02 -> {03,04,05} -> 06, orchestrated
 ├── air-quality-morocco-dashboard.pbix           # Power BI report (see Dashboard above)
 ├── Air Quality Prediction in Moroccan Cities.pdf # written report
 ├── Dockerfile
 ├── docker-compose.yml
-├── dockerignore
+├── .dockerignore
 ├── requirements.txt
 ├── .env                            # OPENWEATHER_API_KEY (not versioned)
 ├── POWERBI.md
@@ -155,13 +159,32 @@ Project/
 
 ## Running the project
 
-### Option A — with Docker (recommended, avoids dependency conflicts)
+### Option A — with Airflow (recommended: orchestrated, restartable, parallel)
 
 ```bash
-docker compose build
-docker compose run air-quality                              # full pipeline
-docker compose run air-quality python 04_federated_learning.py  # single script
+docker compose up -d
 ```
+
+This starts Postgres, initializes Airflow (creates an `admin`/`admin` user —
+**change this before deploying anywhere reachable from outside your own
+machine**), and brings up the scheduler and web UI. Open
+[http://localhost:8080](http://localhost:8080), log in, and trigger the
+`air_quality_pipeline` DAG. It runs `02_prepare_data.py`, then
+`03_build_model.py` / `04_federated_learning.py` /
+`05_weather_only_comparison.py` in parallel (they're independent of each
+other), then `06_export_powerbi.py` once all three have finished.
+
+`01_collect_data.py` is deliberately **not** part of the DAG — it's a
+long-running loop (one collection round per hour, stopped manually), not a
+batch task that completes. Run it standalone instead:
+
+```bash
+docker compose run air-quality python 01_collect_data.py
+```
+
+The `air-quality` service is also handy for running any single script by
+hand without going through Airflow, e.g.
+`docker compose run air-quality python 03_build_model.py`.
 
 ### Option B — locally (virtual environment recommended)
 
@@ -268,4 +291,4 @@ before they reach a reviewer.
 ## Tech stack
 
 Python 3.11 · pandas · scikit-learn · Flower (flwr) · Power BI · Docker ·
-GitHub Actions
+Apache Airflow · GitHub Actions

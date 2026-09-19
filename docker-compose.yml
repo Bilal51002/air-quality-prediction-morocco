@@ -1,8 +1,15 @@
 services:
 
   # ============================================================
-  # APPLICATION / PIPELINE PYTHON
+  # APPLICATION / PIPELINE PYTHON (usage manuel/ad-hoc, hors Airflow)
   # ============================================================
+  # Ce service reste utile pour lancer un script a la main, en particulier
+  # 01_collect_data.py (boucle infinie, jamais orchestre par Airflow) :
+  #   docker compose run air-quality python 01_collect_data.py
+  #   docker compose run air-quality python 03_build_model.py
+  # Le pipeline complet (02 -> 03/04/05 -> 06), lui, est orchestre par
+  # Airflow (voir plus bas) : docker compose up -d, puis declencher le DAG
+  # "air_quality_pipeline" depuis http://localhost:8080.
   air-quality:
     build: .
 
@@ -51,13 +58,16 @@ services:
   # INITIALISATION AIRFLOW
   # ============================================================
   airflow-init:
-    image: apache/airflow:3.0.6
-
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: airflow-init
 
     depends_on:
       postgres:
         condition: service_healthy
+
+    user: "${AIRFLOW_UID:-50000}:0"
 
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -68,9 +78,14 @@ services:
 
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
 
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+
+      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+
     volumes:
       # DAGs Airflow
       - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
 
       # Projet Python accessible depuis Airflow
       - ./scripts:/opt/airflow/project/scripts
@@ -99,13 +114,16 @@ services:
   # AIRFLOW API SERVER / WEB INTERFACE
   # ============================================================
   airflow-api-server:
-    image: apache/airflow:3.0.6
-
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: airflow-api-server
 
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+
+    user: "${AIRFLOW_UID:-50000}:0"
 
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -116,8 +134,13 @@ services:
 
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
 
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+
+      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+
     volumes:
       - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
       - ./scripts:/opt/airflow/project/scripts
       - ./data:/opt/airflow/project/data
       - ./results:/opt/airflow/project/results
@@ -133,13 +156,16 @@ services:
   # AIRFLOW SCHEDULER
   # ============================================================
   airflow-scheduler:
-    image: apache/airflow:3.0.6
-
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
     container_name: airflow-scheduler
 
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+
+    user: "${AIRFLOW_UID:-50000}:0"
 
     environment:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
@@ -148,17 +174,104 @@ services:
 
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
 
-
       AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+
+      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
       - ./scripts:/opt/airflow/project/scripts
       - ./data:/opt/airflow/project/data
       - ./results:/opt/airflow/project/results
 
     command:
       - scheduler
+
+
+  # ============================================================
+  # AIRFLOW DAG PROCESSOR
+  # ============================================================
+  # Composant separe du scheduler depuis Airflow 3.0 : c'est lui qui
+  # parse les fichiers de airflow/dags/. Sans lui, l'UI le signale en
+  # rouge ("Dag Processor") et les DAGs ne sont pas (re)charges.
+  airflow-dag-processor:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    container_name: airflow-dag-processor
+
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+    user: "${AIRFLOW_UID:-50000}:0"
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+
+      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./scripts:/opt/airflow/project/scripts
+      - ./data:/opt/airflow/project/data
+      - ./results:/opt/airflow/project/results
+
+    command:
+      - dag-processor
+
+
+  # ============================================================
+  # AIRFLOW TRIGGERER
+  # ============================================================
+  # Necessaire pour les taches "deferrable" (aucune ici) mais aussi
+  # verifie par le healthcheck de l'UI ("Triggerer" en rouge sinon).
+  airflow-triggerer:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    container_name: airflow-triggerer
+
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+    user: "${AIRFLOW_UID:-50000}:0"
+
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+
+      AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
+
+      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./scripts:/opt/airflow/project/scripts
+      - ./data:/opt/airflow/project/data
+      - ./results:/opt/airflow/project/results
+
+    command:
+      - triggerer
 
 
 # ================================================================
