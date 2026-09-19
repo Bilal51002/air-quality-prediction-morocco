@@ -7,7 +7,6 @@ Sortie : data/powerbi/*.csv (6 fichiers)
 """
 
 import pandas as pd
-import numpy as np
 import os
 
 DATA_DIR = "../data"
