@@ -52,6 +52,15 @@ jobs:
       - name: Recuperer le code
         uses: actions/checkout@v4
 
+      # Les fichiers generes (results/*.csv, data/powerbi/*.csv) ne sont
+      # plus versionnes dans Git (a raison), mais Git ne suit pas non
+      # plus les dossiers vides : sur un checkout propre, results/ et
+      # data/powerbi/ n'existent donc pas du tout tant qu'un script ne
+      # les cree pas lui-meme. On les cree explicitement ici pour eviter
+      # un "Cannot save file into a non-existent directory".
+      - name: Creer les dossiers de sortie (vides apres le nettoyage git)
+        run: mkdir -p results data/powerbi
+
       - name: Installer Python 3.11
         uses: actions/setup-python@v5
         with:
@@ -161,12 +170,12 @@ jobs:
       # Un seul endroit pour cette etape, executee AVANT tout demarrage
       # de service : les dossiers montes en volume (airflow/logs, data,
       # results) doivent etre accessibles en ecriture par l'UID Airflow
-      # (50000) des le depart, sinon la tache prepare_data plante avec
-      # un PermissionError en essayant d'ecrire ses fichiers de sortie.
+      # (50000) des le depart, sinon les taches du DAG plantent avec un
+      # PermissionError en essayant d'ecrire leurs fichiers de sortie.
       - name: Preparer les dossiers avec les bonnes permissions
         run: |
           mkdir -p ./airflow/dags ./airflow/logs ./airflow/plugins ./airflow/config
-          mkdir -p ./data ./results
+          mkdir -p ./data ./results ./data/powerbi
           chmod -R 777 ./airflow/logs ./data ./results
 
       - name: Demarrer Postgres et attendre qu'il soit sain
@@ -226,14 +235,15 @@ jobs:
           docker compose logs airflow-scheduler --tail 200
           exit 1
 
+      # Recupere les logs de TOUTES les taches du run (pas seulement
+      # prepare_data) pour attraper l'erreur peu importe la tache qui
+      # a echoue.
       - name: Afficher le log complet de la tache echouee
         if: failure()
         run: |
-          echo "=== Structure reelle des logs ==="
-          docker compose exec -T airflow-scheduler find /opt/airflow/logs -type f -name "*.log"
-          echo "=== Contenu de tous les logs de prepare_data ==="
-          docker compose exec -T airflow-scheduler bash -c \
-            "find /opt/airflow/logs -path '*prepare_data*' -name '*.log' -exec cat {} \;"
+          echo "=== Logs de toutes les taches du run $RUN_ID ==="
+          docker compose exec -T -e RUN_ID="$RUN_ID" airflow-scheduler bash -c \
+            'find /opt/airflow/logs -path "*run_id=$RUN_ID*" -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \;'
 
       - name: Logs des services en cas d'echec
         if: failure()
