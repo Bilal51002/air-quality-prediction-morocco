@@ -158,11 +158,16 @@ jobs:
       - name: Construire toutes les images
         run: docker compose build
 
-
-      - name: Preparer les dossiers Airflow avec les bonnes permissions
+      # Un seul endroit pour cette etape, executee AVANT tout demarrage
+      # de service : les dossiers montes en volume (airflow/logs, data,
+      # results) doivent etre accessibles en ecriture par l'UID Airflow
+      # (50000) des le depart, sinon la tache prepare_data plante avec
+      # un PermissionError en essayant d'ecrire ses fichiers de sortie.
+      - name: Preparer les dossiers avec les bonnes permissions
         run: |
           mkdir -p ./airflow/dags ./airflow/logs ./airflow/plugins ./airflow/config
-          chmod -R 777 ./airflow/logs
+          mkdir -p ./data ./results
+          chmod -R 777 ./airflow/logs ./data ./results
 
       - name: Demarrer Postgres et attendre qu'il soit sain
         run: docker compose up -d postgres --wait
@@ -220,11 +225,6 @@ jobs:
           echo "Timeout : le DAG n'a pas termine a temps."
           docker compose logs airflow-scheduler --tail 200
           exit 1
-      - name: Preparer les dossiers Airflow avec les bonnes permissions
-        run: |
-          mkdir -p ./airflow/dags ./airflow/logs ./airflow/plugins ./airflow/config
-          chmod -R 777 ./airflow/logs
-          chmod -R 777 ./data ./results
 
       - name: Afficher le log complet de la tache echouee
         if: failure()
@@ -234,6 +234,7 @@ jobs:
           echo "=== Contenu de tous les logs de prepare_data ==="
           docker compose exec -T airflow-scheduler bash -c \
             "find /opt/airflow/logs -path '*prepare_data*' -name '*.log' -exec cat {} \;"
+
       - name: Logs des services en cas d'echec
         if: failure()
         run: docker compose logs --tail 300
