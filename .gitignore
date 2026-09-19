@@ -27,3 +27,6 @@ Thumbs.db
 
 # Temporary files
 *.log
+
+
+airflow/logs/
