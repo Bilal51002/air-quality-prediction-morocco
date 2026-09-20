@@ -3,7 +3,8 @@
 
 Prepare des fichiers CSV propres, avec des noms de colonnes lisibles et
 des formats adaptes, pour construire un dashboard Power BI.
-Sortie : data/powerbi/*.csv (6 fichiers)
+Sortie : data/powerbi/*.csv (6 fichiers, ou 4 si 04_federated_learning.py
+n'a pas encore tourne — voir sections 3 et 4)
 """
 
 import pandas as pd
@@ -48,27 +49,44 @@ villes.to_csv(f"{OUT_DIR}/villes.csv", index=False)
 print(f"villes.csv : {villes.shape}")
 
 # =========================================================
-# 3. Table "comparaison_modeles" : les 3 modeles + federe/centralise
+# 3. Table "comparaison_modeles" : les 3 modeles centralises (etape 3)
+#    + la comparaison federe/centralise (etape 4), format long unifie
+#
+#    federated_vs_centralized_results.csv est produit par
+#    04_federated_learning.py, lance a la main (hors Airflow, incompatible
+#    avec flwr — voir le DAG). S'il n'existe pas encore, on continue sans
+#    cette partie plutot que de planter.
 # =========================================================
 step3 = pd.read_csv(f"{RESULTS_DIR}/step3_model_results.csv")
 step3["Categorie"] = "Modele centralise"
 
-fed = pd.read_csv(f"{RESULTS_DIR}/federated_vs_centralized_results.csv")
-fed = fed.rename(columns={"Approach": "Model"})
-fed["Categorie"] = "Federe vs centralise"
+fed_path = f"{RESULTS_DIR}/federated_vs_centralized_results.csv"
+if os.path.exists(fed_path):
+    fed = pd.read_csv(fed_path)
+    fed = fed.rename(columns={"Approach": "Model"})
+    fed["Categorie"] = "Federe vs centralise"
+    comparaison = pd.concat([step3, fed], ignore_index=True)
+else:
+    print(f"ATTENTION : {fed_path} introuvable (lance 04_federated_learning.py a la main "
+          f"pour l'inclure). Export limite aux modeles centralises.")
+    comparaison = step3
 
-comparaison = pd.concat([step3, fed], ignore_index=True)
 comparaison = comparaison.rename(columns={"Model": "Modele"})
 comparaison.to_csv(f"{OUT_DIR}/comparaison_modeles.csv", index=False)
 print(f"comparaison_modeles.csv : {comparaison.shape}")
 
 # =========================================================
-# 4. Table "courbe_federee" : convergence par round
+# 4. Table "courbe_federee" : convergence par round (pour un line chart)
+#    Meme logique : optionnelle, produite uniquement par 04.
 # =========================================================
-courbe = pd.read_csv(f"{RESULTS_DIR}/federated_learning_curve.csv")
-courbe = courbe.rename(columns={"round": "Round", "mae": "MAE", "rmse": "RMSE", "r2": "R2"})
-courbe.to_csv(f"{OUT_DIR}/courbe_federee.csv", index=False)
-print(f"courbe_federee.csv : {courbe.shape}")
+courbe_path = f"{RESULTS_DIR}/federated_learning_curve.csv"
+if os.path.exists(courbe_path):
+    courbe = pd.read_csv(courbe_path)
+    courbe = courbe.rename(columns={"round": "Round", "mae": "MAE", "rmse": "RMSE", "r2": "R2"})
+    courbe.to_csv(f"{OUT_DIR}/courbe_federee.csv", index=False)
+    print(f"courbe_federee.csv : {courbe.shape}")
+else:
+    print(f"ATTENTION : {courbe_path} introuvable. courbe_federee.csv non genere.")
 
 # =========================================================
 # 5. Table "importance_features" : Random Forest complet vs meteo seule
