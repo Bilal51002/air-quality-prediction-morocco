@@ -80,7 +80,7 @@ services:
 
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
 
-      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
     volumes:
       # DAGs Airflow
@@ -136,7 +136,7 @@ services:
 
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
 
-      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -178,7 +178,7 @@ services:
 
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
 
-      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -220,7 +220,7 @@ services:
 
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
 
-      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -261,7 +261,7 @@ services:
 
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
 
-      AIRFLOW__API_AUTH__JWT_SECRET: a-shared-local-dev-secret-change-me
+      AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
