@@ -1,0 +1,37 @@
+name: Collecte horaire des donnees
+
+on:
+  schedule:
+    # Toutes les heures, a la minute 0 (heure UTC)
+    - cron: "0 * * * *"
+  workflow_dispatch:  # permet de lancer manuellement pour tester
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Recuperer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dependances
+        run: pip install pandas requests python-dotenv
+
+      - name: Collecter les donnees (une seule fois)
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        working-directory: scripts
+        run: python 01_collect_data.py --once
+
+      - name: Commit et push si de nouvelles donnees ont ete ajoutees
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw/morocco_air_quality_data.csv
+          git diff --cached --quiet && echo "Rien de nouveau a commit." || git commit -m "Collecte automatique $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push

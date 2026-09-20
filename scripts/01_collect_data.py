@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import requests
 import pandas as pd
@@ -20,7 +21,7 @@ if not API_KEY:
         "OPENWEATHER_API_KEY=ta_cle_ici"
     )
 
-CSV_FILE = "morocco_air_quality_data.csv"
+CSV_FILE = "../data/raw/morocco_air_quality_data.csv"
 
 COLLECTION_INTERVAL_SECONDS = 3600  # 1 heure
 
@@ -181,16 +182,27 @@ def collect_all_cities_once():
         print("No data collected in this round.")
 
 
-# MAIN LOOP
+# =========================================================
+# MAIN
+# =========================================================
+# NOTE : le mode boucle infinie doit rester actif dans un terminal
+# ouvert pour collecter en continu en local. Le mode --once, lui, est
+# concu pour etre lance par un declencheur externe (GitHub Actions
+# planifie via cron, ou un Planificateur de taches) qui gere lui-meme
+# la periodicite : le script fait une seule collecte puis se termine.
 
 if __name__ == "__main__":
-    while True:
-        print("\n====================================")
-        print("New collection round")
-        print("Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        print("====================================")
-
+    if "--once" in sys.argv:
+        print("Mode --once : une seule collecte.")
         collect_all_cities_once()
+    else:
+        while True:
+            print("\n====================================")
+            print("New collection round")
+            print("Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            print("====================================")
 
-        print("\nWaiting 1 hour before next collection...\n")
-        time.sleep(COLLECTION_INTERVAL_SECONDS)
+            collect_all_cities_once()
+
+            print("\nWaiting 1 hour before next collection...\n")
+            time.sleep(COLLECTION_INTERVAL_SECONDS)

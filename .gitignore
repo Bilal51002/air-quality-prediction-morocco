@@ -30,3 +30,8 @@ Thumbs.db
 
 
 airflow/logs/
+data/morocco_air_quality_data_merged.csv
+data/morocco_air_quality_data_clean.csv
+data/morocco_air_quality_data_model_ready.csv
+data/powerbi/
+results/*.csv
