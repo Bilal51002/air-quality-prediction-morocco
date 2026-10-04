@@ -17,23 +17,15 @@ import mlflow
 import mlflow.sklearn
 
 
-import os
-from pathlib import Path
-
-import mlflow
-
-
 # ============================================================
-# Configuration MLflow
+# 1. Configuration MLflow
 # ============================================================
 
 tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
 
 if tracking_uri:
-    # Docker / Airflow
     mlflow.set_tracking_uri(tracking_uri)
 else:
-    # GitHub Actions / exécution locale sans serveur MLflow
     db_path = Path("../results/mlflow_ci.db").resolve()
     mlflow.set_tracking_uri(f"sqlite:///{db_path}")
 
