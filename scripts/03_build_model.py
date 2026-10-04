@@ -1,9 +1,25 @@
 import os
+
+import pandas as pd
+import numpy as np
+
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+)
+
 import mlflow
 import mlflow.sklearn
 
-# Local Docker/Airflow -> http://mlflow:5000
-# CI GitHub Actions -> stockage local temporaire
+
+# ============================================================
+# 1. Configuration MLflow
+# ============================================================
+
 tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
 
 if tracking_uri:
