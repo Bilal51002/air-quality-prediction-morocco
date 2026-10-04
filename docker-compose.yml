@@ -88,6 +88,8 @@ services:
 
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+
     volumes:
       # DAGs Airflow
       - ./airflow/dags:/opt/airflow/dags
@@ -143,6 +145,7 @@ services:
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
 
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
@@ -186,6 +189,8 @@ services:
 
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -228,6 +233,8 @@ services:
 
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
 
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -268,6 +275,8 @@ services:
       AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-api-server:8080/execution/
 
       AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-dev-only-change-me-in-dotenv}
+
+      MLFLOW_TRACKING_URI: http://mlflow:5000
 
     volumes:
       - ./airflow/dags:/opt/airflow/dags
