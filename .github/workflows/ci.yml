@@ -177,16 +177,38 @@ jobs:
           mkdir -p ./airflow/dags ./airflow/logs ./airflow/plugins ./airflow/config
           mkdir -p ./data ./results ./data/powerbi
           chmod -R 777 ./airflow/logs ./data ./results
-
-      - name: Demarrer Postgres et attendre qu'il soit sain
+      - name: Demarrer Postgres
         run: docker compose up -d postgres --wait
+
+      - name: Demarrer MLflow
+        run: docker compose up -d mlflow
+
+      - name: Attendre que MLflow soit pret
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5000/health > /dev/null; then
+              echo "MLflow est pret."
+              exit 0
+            fi
+
+            echo "En attente de MLflow... ($i/30)"
+            sleep 5
+          done
+
+          echo "MLflow n'a jamais repondu."
+          docker compose logs mlflow --tail 100
+          exit 1
 
       - name: Initialiser Airflow (migrations + utilisateur admin)
         run: docker compose up airflow-init
 
       - name: Demarrer scheduler, dag-processor, triggerer, api-server
-        run: docker compose up -d airflow-scheduler airflow-dag-processor airflow-triggerer airflow-api-server
-
+        run: >
+          docker compose up -d
+          airflow-scheduler
+          airflow-dag-processor
+          airflow-triggerer
+          airflow-api-server
       - name: Attendre que l'API server reponde
         run: |
           for i in $(seq 1 24); do

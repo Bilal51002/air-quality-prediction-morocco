@@ -17,8 +17,14 @@ import mlflow
 import mlflow.sklearn
 
 
+import os
+from pathlib import Path
+
+import mlflow
+
+
 # ============================================================
-# 1. Configuration MLflow
+# Configuration MLflow
 # ============================================================
 
 tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
@@ -28,10 +34,8 @@ if tracking_uri:
     mlflow.set_tracking_uri(tracking_uri)
 else:
     # GitHub Actions / exécution locale sans serveur MLflow
-    local_mlflow_dir = Path("../results/mlruns").resolve()
-    local_mlflow_dir.mkdir(parents=True, exist_ok=True)
-
-    mlflow.set_tracking_uri(local_mlflow_dir.as_uri())
+    db_path = Path("../results/mlflow_ci.db").resolve()
+    mlflow.set_tracking_uri(f"sqlite:///{db_path}")
 
 mlflow.set_experiment("Air Quality Prediction Morocco")
 # ============================================================
