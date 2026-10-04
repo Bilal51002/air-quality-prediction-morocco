@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pandas as pd
 import numpy as np
@@ -23,10 +24,16 @@ import mlflow.sklearn
 tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
 
 if tracking_uri:
+    # Docker / Airflow
     mlflow.set_tracking_uri(tracking_uri)
+else:
+    # GitHub Actions / exécution locale sans serveur MLflow
+    local_mlflow_dir = Path("../results/mlruns").resolve()
+    local_mlflow_dir.mkdir(parents=True, exist_ok=True)
+
+    mlflow.set_tracking_uri(local_mlflow_dir.as_uri())
 
 mlflow.set_experiment("Air Quality Prediction Morocco")
-
 # ============================================================
 # 2. Charger le dataset prêt
 # ============================================================
