@@ -26,7 +26,7 @@ if tracking_uri:
     # Docker / Airflow
     mlflow.set_tracking_uri(tracking_uri)
 else:
-    # GitHub Actions / execution locale sans serveur MLflow
+    # GitHub Actions / exécution locale sans serveur MLflow
     db_path = Path("../results/mlflow_ci.db").resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -43,93 +43,44 @@ mlflow.set_experiment(
 # 2. Charger le dataset prêt
 # ============================================================
 
-INPUT_FILE = (
-    "../data/morocco_air_quality_data_model_ready.csv"
-)
-
-OUTPUT_RESULTS = (
-    "../results/step3_model_results.csv"
-)
-
-FEATURE_IMPORTANCE_FILE = (
-    "../results/feature_importance.csv"
-)
+INPUT_FILE = "../data/morocco_air_quality_data_model_ready.csv"
+OUTPUT_RESULTS = "../results/step3_model_results.csv"
+FEATURE_IMPORTANCE_FILE = "../results/feature_importance.csv"
 
 TARGET = "pm2_5"
-
 
 df = pd.read_csv(INPUT_FILE)
 
 print("Aperçu du dataset :")
 print(df.head())
 
-print(
-    "\nTaille du dataset :",
-    df.shape
-)
+print("\nTaille du dataset :", df.shape)
 
 
 # ============================================================
 # 3. Split chronologique
 # ============================================================
-# Le split est déjà créé dans 02_prepare_data.py.
-#
-# On conserve le split chronologique afin d'éviter une fuite
-# temporelle entre les observations proches dans le temps.
-# ============================================================
 
-train_df = df[
-    df["split"] == "train"
-]
-
-test_df = df[
-    df["split"] == "test"
-]
-
+train_df = df[df["split"] == "train"]
+test_df = df[df["split"] == "test"]
 
 X_train = train_df.drop(
-    columns=[
-        TARGET,
-        "split"
-    ]
+    columns=[TARGET, "split"]
 )
 
-y_train = train_df[
-    TARGET
-]
-
+y_train = train_df[TARGET]
 
 X_test = test_df.drop(
-    columns=[
-        TARGET,
-        "split"
-    ]
+    columns=[TARGET, "split"]
 )
 
-y_test = test_df[
-    TARGET
-]
+y_test = test_df[TARGET]
 
 
-print(
-    "\nTaille X_train :",
-    X_train.shape
-)
-
-print(
-    "Taille X_test  :",
-    X_test.shape
-)
-
-print(
-    "Taille y_train :",
-    y_train.shape
-)
-
-print(
-    "Taille y_test  :",
-    y_test.shape
-)
+print("\nTaille X_train :", X_train.shape)
+print("Taille X_test  :", X_test.shape)
+print("Taille y_train :", y_train.shape)
+print("Taille y_test  :", y_test.shape)
 
 
 # ============================================================
@@ -137,20 +88,16 @@ print(
 # ============================================================
 
 models = {
+    "Linear Regression": LinearRegression(),
 
-    "Linear Regression":
-        LinearRegression(),
+    "Decision Tree Regressor": DecisionTreeRegressor(
+        random_state=42
+    ),
 
-    "Decision Tree Regressor":
-        DecisionTreeRegressor(
-            random_state=42
-        ),
-
-    "Random Forest Regressor":
-        RandomForestRegressor(
-            n_estimators=100,
-            random_state=42
-        )
+    "Random Forest Regressor": RandomForestRegressor(
+        n_estimators=100,
+        random_state=42
+    )
 }
 
 
@@ -159,15 +106,12 @@ models = {
 # ============================================================
 
 results = []
-
 trained_models = {}
 
 
 for model_name, model in models.items():
 
-    print(
-        f"\n===== {model_name} ====="
-    )
+    print(f"\n===== {model_name} =====")
 
     # --------------------------------------------------------
     # Démarrer un run MLflow
@@ -206,26 +150,18 @@ for model_name, model in models.items():
             X_train.shape[1]
         )
 
-
         # ----------------------------------------------------
         # Hyperparamètres spécifiques
         # ----------------------------------------------------
 
-        if (
-            model_name
-            == "Decision Tree Regressor"
-        ):
+        if model_name == "Decision Tree Regressor":
 
             mlflow.log_param(
                 "random_state",
                 42
             )
 
-
-        elif (
-            model_name
-            == "Random Forest Regressor"
-        ):
+        elif model_name == "Random Forest Regressor":
 
             mlflow.log_param(
                 "n_estimators",
@@ -237,7 +173,6 @@ for model_name, model in models.items():
                 42
             )
 
-
         # ----------------------------------------------------
         # Entraînement
         # ----------------------------------------------------
@@ -247,11 +182,9 @@ for model_name, model in models.items():
             y_train
         )
 
-
         trained_models[
             model_name
         ] = model
-
 
         # ----------------------------------------------------
         # Prédictions
@@ -260,7 +193,6 @@ for model_name, model in models.items():
         y_pred = model.predict(
             X_test
         )
-
 
         # ----------------------------------------------------
         # Métriques
@@ -271,7 +203,6 @@ for model_name, model in models.items():
             y_pred
         )
 
-
         rmse = np.sqrt(
             mean_squared_error(
                 y_test,
@@ -279,12 +210,10 @@ for model_name, model in models.items():
             )
         )
 
-
         r2 = r2_score(
             y_test,
             y_pred
         )
-
 
         # ----------------------------------------------------
         # Affichage
@@ -305,7 +234,6 @@ for model_name, model in models.items():
             round(r2, 4)
         )
 
-
         # ----------------------------------------------------
         # Enregistrer les métriques dans MLflow
         # ----------------------------------------------------
@@ -325,34 +253,18 @@ for model_name, model in models.items():
             r2
         )
 
-
         # ----------------------------------------------------
         # Enregistrer le modèle dans MLflow
         # ----------------------------------------------------
 
-        if model_name in [
-            "Decision Tree Regressor",
-            "Random Forest Regressor",
-        ]:
-
-            mlflow.sklearn.log_model(
-                model,
-                name="model",
-                skops_trusted_types=[
-                    "sklearn.tree._tree.Tree"
-                ]
-            )
-
-        else:
-
-            mlflow.sklearn.log_model(
-                model,
-                name="model"
-            )
-
+        mlflow.sklearn.log_model(
+            model,
+            name="model",
+            serialization_format="cloudpickle"
+        )
 
         # ----------------------------------------------------
-        # Ajouter les résultats au tableau final
+        # Ajouter au tableau final
         # ----------------------------------------------------
 
         results.append({
@@ -371,12 +283,10 @@ results_df = pd.DataFrame(
     results
 )
 
-
 print(
     "\n===== Résultats finaux "
     "(split chronologique) ====="
 )
-
 
 print(
     results_df.sort_values(
@@ -393,24 +303,20 @@ rf = trained_models[
     "Random Forest Regressor"
 ]
 
-
 importances = pd.Series(
     rf.feature_importances_,
     index=X_train.columns
 )
 
-
 importances = importances.sort_values(
     ascending=False
 )
-
 
 print(
     "\n===== Top 10 features "
     "les plus importantes "
     "(Random Forest) ====="
 )
-
 
 print(
     importances.head(10)
@@ -428,18 +334,13 @@ Path(
     exist_ok=True
 )
 
-
 importances.to_csv(
     FEATURE_IMPORTANCE_FILE,
-    header=[
-        "importance"
-    ]
+    header=["importance"]
 )
 
-
 print(
-    "\nFeature importance "
-    "sauvegardée dans :",
+    "\nFeature importance sauvegardée dans :",
     FEATURE_IMPORTANCE_FILE
 )
 
@@ -455,12 +356,10 @@ Path(
     exist_ok=True
 )
 
-
 results_df.to_csv(
     OUTPUT_RESULTS,
     index=False
 )
-
 
 print(
     "\nRésultats sauvegardés dans :",
