@@ -1,34 +1,40 @@
 services:
 
   # ============================================================
-  # APPLICATION / PIPELINE PYTHON (usage manuel/ad-hoc, hors Airflow)
+  # APPLICATION / PIPELINE PYTHON
   # ============================================================
-  # Ce service reste utile pour lancer un script a la main, en particulier
-  # 01_collect_data.py (boucle infinie, jamais orchestre par Airflow) :
-  #   docker compose run air-quality python 01_collect_data.py
-  #   docker compose run air-quality python 03_build_model.py
-  # Le pipeline complet (02 -> 03/04/05 -> 06), lui, est orchestre par
-  # Airflow (voir plus bas) : docker compose up -d, puis declencher le DAG
-  # "air_quality_pipeline" depuis http://localhost:8080.
   air-quality:
     build: .
 
     container_name: air-quality
 
     volumes:
-      # Données persistantes
       - ./data:/app/data
-
-      # Résultats persistants
       - ./results:/app/results
-
-      # Scripts accessibles depuis le container
       - ./scripts:/app/scripts
 
     env_file:
       - .env
 
     command: tail -f /dev/null
+
+
+  # ============================================================
+  # MLFLOW
+  # ============================================================
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+
+    container_name: mlflow
+
+    ports:
+      - "5000:5000"
+
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --allowed-hosts "mlflow,mlflow:5000,localhost,localhost:5000"
 
 
   # ============================================================

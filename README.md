@@ -2,346 +2,165 @@
 
 ![CI](https://github.com/Bilal51002/air-quality-prediction-morocco/actions/workflows/ci.yml/badge.svg)
 
-Machine learning project predicting PM2.5 concentration across 7 Moroccan
-cities, using weather and pollution data collected in real time via the
-OpenWeatherMap API, with a **federated learning** exploration (Flower) as
-an alternative to centralized training.
+A data science project for predicting **PM2.5 concentrations in Moroccan cities** using weather and air-pollution data collected with the OpenWeatherMap API.
 
-## Goal
+The project combines a classical machine-learning pipeline with **Airflow**, **MLflow**, **Docker**, **Power BI**, and an experimental **federated learning** setup with Flower.
 
-Predict PM2.5 concentration (fine particulate matter, µg/m³) from weather
-variables (temperature, humidity, pressure, wind) and complementary
-pollutants (AQI, NO2, O3, PM10), under real-world conditions (data
-collected over ~1 month, not simulated).
+## What the project does
 
-## Explore the data first
+The pipeline:
 
-Before diving into the pipeline, see
-[`notebooks/01_exploratory_data_analysis.ipynb`](notebooks/01_exploratory_data_analysis.ipynb)
-for the visual analysis behind the design choices below: PM2.5 distribution
-per city, the collection gap, the correlation heatmap explaining why `pm10`
-dominates the model, and the geographic spread of the 7 cities.
+1. merges and prepares the collected data;
+2. creates a chronological train/test split;
+3. trains several regression models;
+4. tracks experiments and models with MLflow;
+5. compares full-feature and weather-only models;
+6. exports the results for Power BI.
 
-A companion **Power BI dashboard** is also available — see
-[Dashboard](#dashboard-power-bi) below.
+The Airflow DAG runs the preparation step first, then trains the models and runs the weather-only comparison in parallel, before exporting the final Power BI files.
 
 ## Screenshots
 
-**Airflow orchestrating the pipeline** — `prepare_data` fans out to
-`build_model` and `weather_only_comparison` in parallel, then
-`export_powerbi` runs once both are done:
+### Airflow pipeline
 
-![Airflow DAG run, all tasks successful](docs/airflow.jpeg)
+![Airflow DAG](docs/airflow.jpeg)
 
-**Power BI dashboard** — model comparison, federated learning convergence,
-and feature importance in one view:
+### MLflow experiment tracking
 
-![Power BI dashboard overview](docs/air-quality-morocco-dashboard.jpeg)
+![MLflow model metrics](docs/mlflow_air_quality_model_metrics.jpeg)
 
-## Results
+### Power BI dashboard
 
-### Centralized models (chronological 80/20 split)
+![Power BI dashboard](docs/air-quality-morocco-dashboard.jpeg)
+
+## Latest model results
+
+The current centralized models use a **chronological 80/20 split**, which is more realistic for time-dependent pollution data than a random split.
 
 | Model | MAE | RMSE | R² |
-|---|---|---|---|
-| **Random Forest** | **0.73** | **1.12–1.13** | **0.63–0.64** |
-| Linear Regression | 1.02 | 1.22 | 0.569 |
-| Decision Tree | 0.89–0.97 | 1.40–1.47 | 0.375–0.437 |
+|---|---:|---:|---:|
+| Linear Regression | 8.626 | 9.398 | -1.649 |
+| **Decision Tree Regressor** | **3.346** | **4.768** | **0.318** |
+| Random Forest Regressor | 3.442 | 5.056 | 0.233 |
 
-*(Small ranges reflect minor scikit-learn/environment variation between
-local runs and CI/Docker runs — Random Forest and Linear Regression are
-stable to the third decimal; the single Decision Tree is more sensitive to
-environment, as expected for an unpruned, non-ensembled tree.)*
+On the latest collected data, the **Decision Tree Regressor** gives the best result among the three centralized models.
 
-### Federated Learning (Flower, FedAvg, 7 clients = 7 cities)
+The results are tracked automatically in MLflow under the experiment:
+
+```text
+Air Quality Prediction Morocco
+```
+
+MLflow stores the metrics, parameters, and trained scikit-learn models for each run.
+
+## Federated learning experiment
+
+A second experiment explores federated learning with **Flower + FedAvg**, using the cities as separate clients.
 
 | Approach | MAE | RMSE | R² |
-|---|---|---|---|
-| Centralized (LinearRegression) | 0.93 | 1.13 | 0.630 |
-| Federated (SGDRegressor, FedAvg) | 0.79 | 1.08 | 0.663 |
+|---|---:|---:|---:|
+| Centralized Linear Regression | 0.932 | 1.134 | 0.630 |
+| Federated Learning (Flower, FedAvg) | **0.791** | **1.082** | **0.663** |
 
-On every metric here, the federated model outperforms the centralized
-linear baseline. This is **not** an apples-to-apples test of centralization
-vs. federation, since the two rows use different algorithms
-(LinearRegression vs. SGDRegressor) — `scripts/04_federated_learning.py`
-does not currently include a centralized SGDRegressor run with matching
-hyperparameters, which would be needed to isolate the effect of federation
-alone from the effect of switching algorithms. Adding that run is the
-natural next step before drawing a conclusion about the privacy/performance
-trade-off.
+These numbers should not be interpreted as proof that federation is better than centralization, because the centralized and federated experiments currently use different learning algorithms. They are mainly used to demonstrate the federated-learning workflow.
 
-### Feature importance (Random Forest)
+## Feature importance
 
-`pm10` alone accounts for 87% of the importance: the model mostly learns
-the physical relationship between PM2.5 and PM10 (two highly correlated
-particulate measurements), more than a genuine weather → pollution link.
-Weather variables (temperature, humidity, pressure, wind) together
-contribute less than 5% of total importance. See the notebook's
-correlation heatmap for the full picture.
+PM10 is by far the most important feature in the tree-based models.
 
-### Weather-only vs. full feature set
-
-To test the project's original premise ("predict pollution from weather")
-honestly, `scripts/05_weather_only_comparison.py` retrains both models
-after removing every pollution-derived column (`pm10`, `aqi`, `no2`, `o3`):
-
-| Model | Feature set | MAE | RMSE | R² |
-|---|---|---|---|---|
-| Linear Regression | Full (with pm10/aqi/no2/o3) | 1.02 | 1.22 | 0.569 |
-| Linear Regression | **Weather only** | 3.22 | 3.84 | **-3.25** |
-| Random Forest | Full (with pm10/aqi/no2/o3) | 0.73 | 1.13 | 0.632 |
-| Random Forest | **Weather only** | 1.50 | 1.99 | **-0.14** |
-
-**A negative R² means the model performs worse than simply predicting the
-training mean.** On this dataset (~1 month, 7 cities), weather variables
-alone carry almost no predictive signal for PM2.5 — nearly all of the
-"full model" performance comes from `pm10` acting as a strongly correlated
-proxy, not from a genuine weather → pollution relationship. A longer
-collection period spanning multiple seasons would likely be needed to
-surface a real signal, if one exists at this temporal granularity. This
-result is treated as a genuine finding, not a failure to hide.
-
-## Dashboard (Power BI)
-
-[`air-quality-morocco-dashboard.pbix`](air-quality-morocco-dashboard.pbix)
-gives an interactive view of the same results: PM2.5 by city on a map,
-model comparison (R²), federated learning convergence by round, and
-feature importance (full vs. weather-only). See the screenshot above under
-[Screenshots](#screenshots).
-
-It is built from a small set of CSVs generated by
-[`scripts/06_export_powerbi.py`](scripts/06_export_powerbi.py) into
-[`data/powerbi/`](data/powerbi/) (`villes`, `mesures`, `comparaison_modeles`,
-`meteo_vs_complet`, `courbe_federee`, `importance_features`). See
-[`POWERBI.md`](POWERBI.md) for how to regenerate them and how the report is
-put together.
-
-> The current export has no continuous date table, so time-based visuals
-> (rolling averages, the collection gap) aren't available yet in the
-> `.pbix` — only per-city and per-model aggregates.
+This is an important result of the project: much of the predictive performance comes from the strong relationship between **PM2.5 and PM10**, while weather-only models perform much worse.
 
 ## Project structure
 
-```
-Project/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                              # lint, pipeline, docker-build, integration-airflow
-├── docs/
-│   ├── airflow.jpeg                              # screenshot: DAG run, all tasks successful
-│   └── air-quality-morocco-dashboard.jpeg        # screenshot: Power BI dashboard
-├── notebooks/
-│   └── 01_exploratory_data_analysis.ipynb       # EDA: distributions, correlations, map
-├── data/
-│   ├── raw/                                    # 3 raw collection files (3 team members)
-│   ├── morocco_air_quality_data_merged.csv     # generated by 02: 3 sources merged, 7 cities
-│   ├── morocco_air_quality_data_clean.csv      # generated by 02: cleaned + chronological split
-│   ├── morocco_air_quality_data_model_ready.csv# generated by 02: encoded + scaled (leak-free)
-│   └── powerbi/                                # generated by 06: CSVs consumed by the .pbix
-│       ├── villes.csv
-│       ├── mesures.csv
-│       ├── comparaison_modeles.csv
-│       ├── meteo_vs_complet.csv
-│       ├── courbe_federee.csv
-│       └── importance_features.csv
-├── scripts/
-│   ├── 00_merge_sources.py       # standalone merge of the 3 sources (reference / debug)
-│   ├── 01_collect_data.py        # OpenWeatherMap API collection (7 cities) — run manually
-│   ├── 02_prepare_data.py        # auto merge + cleaning + split + scaling
-│   ├── 03_build_model.py         # Linear / Decision Tree / Random Forest
-│   ├── 04_federated_learning.py  # FedAvg via Flower (SGDRegressor, 7 clients) — run manually
-│   ├── 05_weather_only_comparison.py  # full feature set vs. weather-only comparison
-│   └── 06_export_powerbi.py      # exports data/powerbi/ for the Power BI dashboard
-├── results/
-│   ├── step3_model_results.csv
-│   ├── federated_vs_centralized_results.csv
-│   ├── federated_learning_curve.csv
-│   ├── feature_importance.csv
-│   ├── weather_only_vs_full_results.csv
-│   └── feature_importance_weather_only.csv
+```text
+.
 ├── airflow/
-│   ├── Dockerfile                 # apache/airflow + requirements-airflow.txt (no flwr, see below)
-│   └── dags/
-│       └── air_quality_pipeline.py  # 02 -> {03, 05} -> 06, orchestrated
-├── air-quality-morocco-dashboard.pbix           # Power BI report (see Dashboard above)
-├── Air Quality Prediction in Moroccan Cities.pdf # written report
-├── Dockerfile
+│   ├── dags/
+│   │   └── air_quality_pipeline.py
+│   └── Dockerfile
+├── data/
+│   ├── raw/
+│   └── powerbi/
+├── docs/
+│   ├── airflow.jpeg
+│   ├── mlflow_air_quality_model_metrics.jpeg
+│   └── air-quality-morocco-dashboard.jpeg
+├── notebooks/
+│   └── 01_exploratory_data_analysis.ipynb
+├── results/
+├── scripts/
+│   ├── 01_collect_data.py
+│   ├── 02_prepare_data.py
+│   ├── 03_build_model.py
+│   ├── 04_federated_learning.py
+│   ├── 05_weather_only_comparison.py
+│   └── 06_export_powerbi.py
 ├── docker-compose.yml
-├── .dockerignore
-├── requirements.txt               # full deps (pandas, scikit-learn, flwr...) for local/manual runs
-├── requirements-airflow.txt       # subset without flwr, installed in the Airflow image only
-├── .env                            # OPENWEATHER_API_KEY (not versioned)
-├── POWERBI.md
+├── requirements.txt
+├── requirements-airflow.txt
 └── README.md
 ```
 
-## Running the project
+## Run with Docker and Airflow
 
-### Option A — with Airflow (recommended: orchestrated, restartable, parallel)
-
-```bash
-docker compose up -d
-```
-
-This starts Postgres, initializes Airflow (creates an `admin`/`admin` user —
-**change this before deploying anywhere reachable from outside your own
-machine**), and brings up the scheduler, DAG processor, triggerer, and web
-UI. Open [http://localhost:8080](http://localhost:8080), log in, and
-trigger the `air_quality_pipeline` DAG. It runs `02_prepare_data.py`, then
-`03_build_model.py` / `05_weather_only_comparison.py` in parallel (they're
-independent of each other), then `06_export_powerbi.py` once both have
-finished — see the screenshot under [Screenshots](#screenshots) for a
-successful run.
-
-Two scripts are deliberately **not** part of the DAG — run them by hand
-instead:
+Build and start the project:
 
 ```bash
-docker compose run air-quality python 01_collect_data.py
-docker compose run air-quality python 04_federated_learning.py
+docker compose up -d --build
 ```
 
-- `01_collect_data.py` is a long-running loop (one collection round per
-  hour, stopped manually), not a batch task that completes.
-- `04_federated_learning.py` depends on **Flower**, whose current version
-  requires SQLAlchemy 2.x, protobuf 5.x, and other dependency versions
-  that conflict directly with what Airflow 3 pins internally
-  (SQLAlchemy 1.4.x, protobuf 4.x). The Airflow image installs
-  `requirements-airflow.txt` — the same dependency set minus `flwr` — so
-  this isn't a version-pinning problem to fix with a flag, the two
-  frameworks simply can't share one Python environment.
+Open Airflow:
 
-The `air-quality` service is also handy for running any single script by
-hand without going through Airflow, e.g.
-`docker compose run air-quality python 03_build_model.py`.
-
-### Option B — locally (virtual environment recommended)
-
-```bash
-python -m venv venv
-# Windows:
-.\venv\Scripts\activate
-# Mac/Linux:
-source venv/bin/activate
-
-pip install -r requirements.txt
-
-cd scripts
-python 02_prepare_data.py
-python 03_build_model.py
-python 04_federated_learning.py
-python 05_weather_only_comparison.py
+```text
+http://localhost:8080
 ```
 
-> Scripts must currently be run **from inside `scripts/`** (they use
-> relative paths like `../data/...`). Running them from the project root
-> or via an IDE's "Run" button with a different working directory will
-> raise a `FileNotFoundError`.
+Then trigger:
 
-### Collecting new data (optional)
-
-Requires an OpenWeatherMap API key in a `.env` file at the project root:
+```text
+air_quality_pipeline
 ```
-OPENWEATHER_API_KEY=your_key_here
+
+Open MLflow:
+
+```text
+http://localhost:5000
 ```
-Then:
-```bash
-python scripts/01_collect_data.py
+
+The MLflow server is connected to the Airflow training task, so each execution of `03_build_model.py` creates new tracked runs automatically.
+
+## Updating the data
+
+New raw data can be added to:
+
+```text
+data/raw/
 ```
-The script runs continuously (one collection round per hour, 7 cities).
-Stop it with `Ctrl+C` once enough data has been collected, then rerun
-`02_prepare_data.py` to regenerate the prepared files.
 
-## Continuous Integration
+After pulling new data from GitHub, simply rerun the Airflow DAG. The preparation, model training, MLflow tracking, and Power BI export will be regenerated from the updated dataset.
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push
-and pull request to `main`, plus on manual trigger. Four jobs:
+## Power BI
 
-| Job | What it checks | Runs on |
-|---|---|---|
-| `lint` | Python syntax errors in `scripts/` and `airflow/dags/` | every push/PR |
-| `pipeline` | Full `02 → 03 → 04 → 05 → 06` pipeline runs end to end; uploads `results/` and `data/powerbi/` as a downloadable artifact | every push/PR |
-| `docker-build` | Both Dockerfiles build, `docker-compose.yml` is syntactically valid, and the Airflow DAG imports without error (using the actual built image) | every push/PR |
-| `integration-airflow` | Spins up Postgres + all 5 Airflow services, triggers `air_quality_pipeline` for real, and checks it finishes in `success` state | push to `main` and manual trigger only (~3–5 min, skipped on PRs to keep feedback fast) |
+The dashboard uses CSV files generated automatically in:
 
-This combination catches broken paths, missing dependencies, silent script
-failures, a misconfigured `docker-compose.yml`, and a DAG that fails to run
-end to end — before any of it reaches a reviewer.
+```text
+data/powerbi/
+```
 
-## Methodology and technical choices
+It includes:
 
-### Data
-- **3 sources merged automatically**: each team member collected data
-  separately (different cities), and `02_prepare_data.py` detects and
-  merges every CSV present in `data/raw/` — no code change needed if a
-  new file is added later.
-- **7 cities**: Casablanca, Rabat, Marrakech, Fes, Agadir, Tangier, Karia
-  Ba Mohamed.
-- **2,099 rows** in total after merging and deduplication, spanning
-  April 26 to May 23, 2026.
-- Columns kept only if present in at least 80% of rows. Excluded:
-  `feels_like`, `wind_deg`, `clouds`, `visibility`, `weather_main`, `co`,
-  `no`, `so2`, `nh3` — each was collected by only one of the 3 sources.
-
-### Avoiding data leakage
-- **Chronological split** (oldest 80% = train, most recent 20% = test)
-  instead of a random split, to prevent near-identical hourly
-  measurements from ending up on both sides of the split (pollution data
-  is strongly autocorrelated over time).
-- **Scaling (`StandardScaler`) fitted on the training set only**, then
-  applied to the test set — the test set never influences the scaling
-  statistics.
-
-### Federated Learning
-- Implemented with the **Flower** framework, not a manual simulation:
-  each city receives the global weights, trains a `SGDRegressor` locally
-  on its own data (never shared), and returns its updated weights; the
-  server aggregates them via **FedAvg** (weighted average by sample
-  count, handled natively by Flower).
-- Deliberately low learning rate (`eta0=0.0005`): with scikit-learn's
-  default value, the weights diverge after a few rounds due to the
-  cumulative effect of FedAvg averaging across 7 clients.
-
-### Orchestration (Airflow)
-- `air_quality_pipeline` runs `02_prepare_data.py`, then
-  `03_build_model.py` and `05_weather_only_comparison.py` in parallel
-  (they're independent — both read the output of `02`, neither reads the
-  other's output), then `06_export_powerbi.py` once both finish.
-- `01_collect_data.py` and `04_federated_learning.py` are excluded from
-  the DAG and run manually — see [Option A](#option-a--with-airflow-recommended-orchestrated-restartable-parallel)
-  above for why.
-- Airflow 3 splits scheduling, DAG parsing, task execution, and the web
-  UI into separate components (scheduler, dag-processor, triggerer,
-  api-server) that talk to each other over an internal HTTP API — all
-  four run as separate services in `docker-compose.yml`, alongside
-  Postgres for Airflow's metadata database.
-
-## Known limitations
-
-- **`pm10` dominates the prediction** (87% importance), and weather alone
-  yields a negative R² (see "Weather-only vs. full feature set" above) —
-  the model mostly captures a physical relationship between two
-  particulate measurements, not the weather → pollution link stated in
-  the original goal.
-- **Short collection period** (~1 month, spring only): no seasonal
-  variability captured, so results may not generalize to the full year.
-- **Discontinuous collection**: a ~5.6-day gap in data was identified
-  (the collection machine likely went to sleep or was shut down),
-  reducing actual coverage to 23 of the 27 days in the period.
-- **Relatively low PM2.5 values** (mean 4.02 µg/m³) compared to typically
-  reported averages for Moroccan cities — worth double-checking if the
-  project continues (units, OpenWeatherMap's modeled vs. ground-measured
-  sensor positions).
-- **Agadir absent from the test set**: its collection window (April
-  30–May 8) ends before the test period begins (May 12), so the model is
-  never specifically evaluated on this city.
-- **Scripts assume a fixed working directory** (`scripts/`) — not yet
-  robust to being launched from elsewhere.
-- **`01_collect_data.py` and `04_federated_learning.py` are not
-  orchestrated** — see [Orchestration (Airflow)](#orchestration-airflow)
-  above.
+- average PM2.5 by city;
+- model comparison;
+- federated-learning convergence;
+- feature importance;
+- full-feature vs. weather-only comparison.
 
 ## Tech stack
 
-Python 3.11 · pandas · scikit-learn · Flower (flwr) · Power BI · Docker ·
-Apache Airflow · GitHub Actions
+**Python 3.11 · pandas · scikit-learn · MLflow · Apache Airflow · Docker · Flower · Power BI · GitHub Actions**
+
+## Main takeaway
+
+This project started as a PM2.5 prediction task, but the experiments also revealed an important limitation: pollution-related variables, especially PM10, carry much more predictive information than weather variables alone.
+
+That result is kept visible rather than hidden, because understanding why a model works is as important as obtaining a good score.
